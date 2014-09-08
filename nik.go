@@ -23,9 +23,13 @@ void sethostfile(int nspid, char* hostfile) {
 		strcpy(nspath, _nspath);
 
 		free(_nspath);
-
 		int fd = open(nspath, O_RDONLY, 0644);
-		if (setns(fd, 0) == -1) {
+		free(nspath);
+
+		int setns_r = setns(fd, 0);
+		close(fd);
+
+		if (setns_r == -1) {
 			fprintf(stderr, "setns failed: %s\n", strerror(errno));
 			exit(2);
 		}
@@ -34,6 +38,7 @@ void sethostfile(int nspid, char* hostfile) {
 		if (ftruncate(hfd, 0) != 0) {
 			fprintf(stderr, "failed to truncate hostfile");
 		}
+
 		int bytes = write(hfd, hostfile, strlen(hostfile) + 1);
 		close(hfd);
 
