@@ -62,6 +62,8 @@ void sethostfile(int nspid, char* hostfile) {
 		int status;
 		waitpid(pid, &status, 0);
 		errno = status;
+
+		if (errno != 0) exit(errno);
 	}
 
 	return;
