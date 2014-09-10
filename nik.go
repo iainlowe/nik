@@ -35,8 +35,17 @@ void sethostfile(int nspid, char* hostfile) {
 		}
 
 		int hfd = open("/etc/hosts", O_RDWR, 0644);
+
+		if (hfd == -1) {
+			if (errno == 30) {
+				fprintf(stderr, "failed to open /etc/hosts in write mode; are you running Docker 1.2+?\nCheck with 'docker version' and try again.");
+			} else {
+				fprintf(stderr, "failed to open /etc/hosts: %s\n", strerror(errno));
+			}
+		}
+
 		if (ftruncate(hfd, 0) != 0) {
-			fprintf(stderr, "failed to truncate hostfile");
+			fprintf(stderr, "failed to truncate hostfile: %s\n", strerror(errno));
 		}
 
 		int bytes = write(hfd, hostfile, strlen(hostfile) + 1);
@@ -66,12 +75,15 @@ import (
 	"flag"
 	"fmt"
 	"hash/fnv"
+	"io"
+	"io/ioutil"
 	"log"
 	"net"
 	"os"
 	"strings"
 	"time"
 
+	"encoding/hex"
 	"encoding/json"
 	"path/filepath"
 )
@@ -176,10 +188,10 @@ func updateContainers(hash string) string {
 
 	h := fnv.New64()
 	h.Write(buf.Bytes())
-	b := h.Sum([]byte{})
+	hstr := hex.EncodeToString(h.Sum(nil))
 
-	if string(b) == hash {
-		return hash
+	if hstr == hash {
+		return hstr
 	}
 
 	ss := C.CString(s)
@@ -190,15 +202,38 @@ func updateContainers(hash string) string {
 		C.sethostfile(C.int(c.State.Pid), ss)
 	}
 
-	return string(b)
+	return hstr
+}
+
+var (
+	Debug, Info, Warn, Error *log.Logger
+)
+
+func initLogging(debug, info, warn, err io.Writer) {
+	Debug = log.New(debug, "DEBUG: ", log.Ldate|log.Ltime)
+	Info = log.New(info, "INFO: ", log.Ldate|log.Ltime)
+	Warn = log.New(warn, "WARN: ", log.Ldate|log.Ltime)
+	Error = log.New(err, "ERROR: ", log.Ldate|log.Ltime)
 }
 
 func main() {
 	var interval int
+	var verbose bool
+	var quiet bool
 
 	flag.IntVar(&interval, "i", 5, "polling interval")
+	flag.BoolVar(&quiet, "q", false, "be quiet")
+	flag.BoolVar(&verbose, "v", false, "be verbose")
 
 	flag.Parse()
+
+	if verbose {
+		initLogging(os.Stdout, os.Stdout, os.Stdout, os.Stdout)
+	} else if quiet {
+		initLogging(ioutil.Discard, ioutil.Discard, ioutil.Discard, ioutil.Discard)
+	} else {
+		initLogging(ioutil.Discard, os.Stdout, os.Stderr, os.Stderr)
+	}
 
 	if os.Geteuid() != 0 {
 		fmt.Println("abort: need to be root")
@@ -209,6 +244,7 @@ func main() {
 
 	for {
 		hash = updateContainers(hash)
+		Info.Println("processed update with hash:", hash)
 		time.Sleep(time.Duration(interval) * time.Second)
 	}
 }
