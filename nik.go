@@ -38,7 +38,8 @@ void sethostfile(int nspid, char* hostfile) {
 
 		if (hfd == -1) {
 			if (errno == 30) {
-				fprintf(stderr, "failed to open /etc/hosts in write mode; are you running Docker 1.2+?\nCheck with 'docker version' and try again.");
+				fprintf(stderr, "failed to open /etc/hosts in write mode; are you running Docker 1.2+?\nCheck with 'docker version' and try again.\n");
+				exit(99);
 			} else {
 				fprintf(stderr, "failed to open /etc/hosts: %s\n", strerror(errno));
 			}
